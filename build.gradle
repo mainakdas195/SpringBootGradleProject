@@ -1,0 +1,105 @@
+plugins {
+	id 'org.springframework.boot' version '2.4.5'
+	id 'io.spring.dependency-management' version '1.0.11.RELEASE'
+	id 'java'
+	id 'jacoco'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '1.8'
+
+repositories {
+	mavenCentral()
+}
+
+ext {
+	jacocoVersion = '0.8.7'
+}
+
+//sourceSets.main.java.srcDirs "src/generated-sources/jaxb"
+
+configurations {
+    jaxb
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation group: 'org.springframework.boot', name: 'spring-boot-starter-parent', version: '2.4.4'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	compile "com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.9.0"
+	implementation group: 'com.google.code.gson', name: 'gson', version: '2.3.1'
+    jaxb (
+		'com.sun.xml.bind:jaxb-xjc:2.3.1',
+		'com.sun.xml.bind:jaxb-impl:2.3.1',
+		'org.glassfish.jaxb:jaxb-runtime:2.3.3'
+    )
+}
+
+task jaxb {
+    System.setProperty('javax.xml.accessExternalSchema', 'all')
+    def jaxbTargetDir = file("src/generated-sources/jaxb")
+    //def jaxbTargetDir = file("src/main/java")
+    doLast {
+        jaxbTargetDir.mkdirs()
+        ant.taskdef(
+			name: 'xjc',
+			classname: 'com.sun.tools.xjc.XJCTask',
+			classpath: configurations.jaxb.asPath
+        )
+        ant.jaxbTargetDir = jaxbTargetDir
+        ant.xjc(
+			destdir: '${jaxbTargetDir}',
+			package: 'com.example.users.generatedmodel',
+			schema: 'src/main/resources/xsd/schema3.xsd'
+        )
+    }
+}
+
+jacoco {
+	toolVersion=jacocoVersion
+	reportsDirectory = layout.buildDirectory.dir('customJacocoReportDir')
+}
+
+jacocoTestReport {
+	dependsOn test // tests are required to run before generating the report
+	reports {
+		html.enabled true
+		xml.enabled true
+		csv.enabled true
+	}
+	
+	//Below will exclude the directory from test coverage
+	afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it,
+                    exclude: [
+                              
+                    ]
+            )
+        }))
+    }
+	//after jacocoTestReport below task will be executed
+	finalizedBy jacocoTestCoverageVerification
+}
+test {
+	useJUnitPlatform()
+	//This can be added here also, so that after test jacoco report is generated
+	finalizedBy jacocoTestReport
+}
+
+//This tells Gradle workflow engine to execute generate test report after the test task is completed. 
+test.finalizedBy jacocoTestReport
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+        	enabled = true
+            limit {
+                minimum = 0.0
+            }
+        }        
+    }
+}
+
+compileJava.dependsOn jaxb
